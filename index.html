@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Showduino Studio - Main Menu</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      background: var(--bg-primary);
+      background-image: 
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(255, 0, 68, 0.02) 2px,
+          rgba(255, 0, 68, 0.02) 4px
+        );
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-top: 20px;
+      position: relative;
+    }
+    
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.03;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 0, 68, 0.1) 2px,
+        rgba(255, 0, 68, 0.1) 4px
+      );
+      animation: glitch 10s infinite;
+    }
+    
+    @keyframes glitch {
+      0%, 100% { transform: translate(0); }
+      20% { transform: translate(-2px, 2px); }
+      40% { transform: translate(-2px, -2px); }
+      60% { transform: translate(2px, 2px); }
+      80% { transform: translate(2px, -2px); }
+    }
+    
+    .logo-large {
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: var(--haunt-red);
+      text-shadow: 0 0 20px var(--haunt-red-glow);
+      margin-bottom: 8px;
+      z-index: 10;
+      position: relative;
+    }
+    
+    .logo-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 40px;
+      z-index: 10;
+      position: relative;
+    }
+    
+    .menu-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      max-width: 1200px;
+      width: 100%;
+      padding: 0 20px;
+      z-index: 10;
+      position: relative;
+    }
+    
+    .menu-card {
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      z-index: 10;
+    }
+    
+    .menu-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 32px var(--haunt-red-glow);
+      background: linear-gradient(135deg, rgba(26, 10, 26, 0.95) 0%, rgba(10, 10, 26, 0.95) 100%);
+    }
+    
+    .menu-card-icon {
+      font-size: 48px;
+      margin-bottom: 8px;
+    }
+    
+    .menu-card-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    
+    .menu-card-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+    
+    .status-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border-top: 2px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      z-index: 100;
+      pointer-events: auto;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    }
+    
+    body {
+      padding-bottom: 60px;
+    }
+    
+    .status-indicators {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    
+    .status-badge {
+      padding: 6px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.3s ease;
+      border: 2px solid;
+    }
+    
+    .status-badge.connected {
+      background: rgba(68, 255, 68, 0.2);
+      border-color: #44ff44;
+      color: #44ff44;
+      box-shadow: 0 0 10px rgba(68, 255, 68, 0.3);
+    }
+    
+    .status-badge.disconnected {
+      background: rgba(112, 112, 112, 0.2);
+      border-color: #707070;
+      color: #707070;
+    }
+    
+    .status-badge.connecting {
+      background: rgba(255, 170, 68, 0.2);
+      border-color: #ffaa44;
+      color: #ffaa44;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    
+    .status-icon {
+      font-size: 14px;
+    }
+    
+    .status-device-info {
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="glitch-overlay"></div>
+  
+  <div class="logo-large">SHOWDUINO</div>
+  <div class="logo-subtitle">Studio Control System</div>
+  
+  <div class="menu-container">
+    <a href="studio.html" class="menu-card">
+      <div class="menu-card-icon">🎬</div>
+      <div class="menu-card-title">Studio</div>
+      <div class="menu-card-desc">Timeline Editor & Show Builder</div>
+    </a>
+    
+    <a href="led_control.html" class="menu-card">
+      <div class="menu-card-icon">💡</div>
+      <div class="menu-card-title">LED Control</div>
+      <div class="menu-card-desc">Pixel Effects & Lighting</div>
+    </a>
+    
+    <a href="hauntsync.html" class="menu-card">
+      <div class="menu-card-icon">🌐</div>
+      <div class="menu-card-title">HauntSync</div>
+      <div class="menu-card-desc">Network Dashboard & Control</div>
+    </a>
+    
+    <a href="system.html" class="menu-card">
+      <div class="menu-card-icon">⚙️</div>
+      <div class="menu-card-title">System</div>
+      <div class="menu-card-desc">Settings & Configuration</div>
+    </a>
+  </div>
+  
+  <div class="status-bar">
+    <div class="status-indicators">
+      <div class="status-badge disconnected" id="statusRTC">
+        <span class="status-icon">🕐</span>
+        <span>RTC</span>
+      </div>
+      <div class="status-badge disconnected" id="statusSD">
+        <span class="status-icon">💾</span>
+        <span>SD</span>
+      </div>
+      <div class="status-badge disconnected" id="statusAudio">
+        <span class="status-icon">🔊</span>
+        <span>AUDIO</span>
+      </div>
+    </div>
+    <div class="status-device-info" id="deviceInfo">Connecting to SUE...</div>
+  </div>
+  
+  <script>
+    let statusCheckInterval = null;
+    let lastStatusCheck = 0;
+    
+    async function checkSUEStatus() {
+      try {
+        const response = await fetch('/api/status');
+        if (!response.ok) {
+          throw new Error('Status check failed');
+        }
+        
+        const data = await response.json();
+        updateStatusIndicators(data);
+        lastStatusCheck = Date.now();
+      } catch (error) {
+        console.error('Error checking SUE status:', error);
+        setAllDisconnected();
+      }
+    }
+    
+    function updateStatusIndicators(data) {
+      // Update RTC status
+      const rtcBadge = document.getElementById('statusRTC');
+      if (data.rtc_present) {
+        rtcBadge.className = 'status-badge connected';
+      } else {
+        rtcBadge.className = 'status-badge disconnected';
+      }
+      
+      // Update SD status
+      const sdBadge = document.getElementById('statusSD');
+      if (data.sd_present) {
+        sdBadge.className = 'status-badge connected';
+      } else {
+        sdBadge.className = 'status-badge disconnected';
+      }
+      
+      // Update Audio status
+      const audioBadge = document.getElementById('statusAudio');
+      if (data.audio && data.audio.present) {
+        audioBadge.className = 'status-badge connected';
+      } else {
+        audioBadge.className = 'status-badge disconnected';
+      }
+      
+      // Update device info
+      const deviceInfo = document.getElementById('deviceInfo');
+      const ip = data.ap_ip || data.sta_ip || 'Unknown';
+      const mode = data.wifi_mode || 'ap';
+      deviceInfo.textContent = `SUE @ ${ip} (${mode.toUpperCase()})`;
+    }
+    
+    function setAllDisconnected() {
+      document.getElementById('statusRTC').className = 'status-badge disconnected';
+      document.getElementById('statusSD').className = 'status-badge disconnected';
+      document.getElementById('statusAudio').className = 'status-badge disconnected';
+      document.getElementById('deviceInfo').textContent = 'Disconnected from SUE';
+    }
+    
+    function setAllConnecting() {
+      document.getElementById('statusRTC').className = 'status-badge connecting';
+      document.getElementById('statusSD').className = 'status-badge connecting';
+      document.getElementById('statusAudio').className = 'status-badge connecting';
+    }
+    
+    // Initial status check
+    setAllConnecting();
+    checkSUEStatus();
+    
+    // Check status every 2 seconds
+    statusCheckInterval = setInterval(checkSUEStatus, 2000);
+    
+    // Also check when page becomes visible
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        checkSUEStatus();
+      }
+    });
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+      }
+    });
+  </script>
+</body>
+</html>
+

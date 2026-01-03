@@ -1,0 +1,46 @@
+:root {
+  /* HauntSync/GoreFX Dark Theme */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a0a1a;
+  --bg-tertiary: #0a0a1a;
+  --bg-hover: rgba(26, 10, 26, 0.8);
+  --bg-active: rgba(255, 0, 68, 0.15);
+  
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #707070;
+  
+  --accent: #ff0044;
+  --accent-hover: #ff4488;
+  --accent-active: #cc0033;
+  
+  --danger: #ff4444;
+  --success: #44ff44;
+  --warning: #ffaa44;
+  
+  --border: #3a1a3a;
+  --border-light: #4a2a4a;
+  
+  /* HauntSync specific colors */
+  --haunt-red: #ff0044;
+  --haunt-red-glow: rgba(255, 0, 68, 0.5);
+  --haunt-bg-dark: #0a0a0a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
