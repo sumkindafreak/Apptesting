@@ -1,64 +1,51 @@
 # Showduino CYD Director v1 — Arduino IDE
 
-**5" RGB display, 800×400, ESP32-S3**
+**2.8" CYD (ESP32-2432S028R)** — 320×240, Mega serial director
 
-Matches your project path:
-`firmware/controller-cyd/showduino_cyd_director_v1/`
-
-## Why your old sketch failed
-
-Your compile error came from mixing two different touch libraries:
-
-| Wrong (your error) | Correct for 5" RGB |
-|--------------------|-------------------|
-| `XPT2046_Bitbang` | **esp32-smartdisplay** |
-| `touch.touched()` | GT911 handled by LVGL |
-| `TS_Point` / `getPoint()` | No manual touch reads needed |
-
-`XPT2046_Bitbang` is for the **2.4" Cheap Yellow Display** (320×240).  
-Your **5" 800×400** panel uses **16-bit RGB + GT911** (capacitive) — a completely different driver stack.
-
-This sketch removes all `XPT2046_Bitbang` / `getTouchPoint()` code.
+Sends commands to Arduino Mega via Serial2. Does **not** use esp32-smartdisplay (that's for 5" RGB panels).
 
 ## Libraries
 
-1. **lvgl** 9.2.x (Library Manager)
-2. **esp32_smartdisplay** 2.1.x — [GitHub ZIP](https://github.com/rzeldent/esp32-smartdisplay)
+| Library | Install |
+|---------|---------|
+| **TFT_eSPI** | Library Manager — configure `User_Setup` for your CYD |
+| **XPT2046_Bitbang** | Library Manager (`ddxfish`) — **not** XPT2046_Touchscreen |
 
-## LVGL config (once)
+Use **one** Bitbang library. If Arduino picks the wrong one:
+- Sketch → Include Library → **XPT2046_Bitbang** (not Slim)
 
-```bash
-./install_lv_conf.sh
+## Touch fix (applied)
+
+`XPT2046_Bitbang` does **not** have `touched()` or `TS_Point`. Correct usage:
+
+```cpp
+Point p = touch.getTouch();
 ```
 
-Or copy `lv_conf.h` → `Arduino/libraries/lvgl/lv_conf.h`
+Touch detect uses **IRQ pin 36** (LOW = pressed).
 
-## Board settings (Tools)
+## First boot
 
-| Setting | Value |
-|---------|-------|
-| Board | **ESP32S3 Dev Module** |
-| USB CDC On Boot | **Disabled** |
-| Flash Size | **16MB** |
-| PSRAM | **OPI PSRAM** |
-| CPU | **240 MHz** |
+`touch.begin()` may run **calibration** over USB Serial — follow prompts (touch top-left, then bottom-right).
 
-`build_opt.h` sets `DISPLAY_WIDTH=800` and `DISPLAY_HEIGHT=400` for your 5" panel.
+## Mega wiring
 
-## If the image is wrong
+| CYD | Mega |
+|-----|------|
+| TX pin 1 | RX1 pin 19 |
+| RX pin 3 | TX1 pin 18 |
+| GND | GND |
 
-Some 5" boards are actually **800×480**. If you see a cropped or rolling image, change one line in `build_opt.h`:
+## Board
 
+**ESP32 Dev Module** (or ESP32-WROOM) — the classic 2.8" CYD, not ESP32-S3 5" RGB.
+
+## Touch upside-down?
+
+In `getTouchPoint()`, uncomment the swap lines:
+
+```cpp
+int16_t tmp = x; x = y; y = tmp;
 ```
--DDISPLAY_HEIGHT=480
-```
 
-and recompile.
-
-## Upload
-
-1. Set `SUE_MAC` in the `.ino` file
-2. Open `showduino_cyd_director_v1.ino` in Arduino IDE
-3. Upload
-
-Touch works automatically through `smartdisplay_init()` — no `getTouchPoint()` function needed.
+Or call `touch.setCalibration(xMin, yMin, xMax, yMax)` after measuring raw values.

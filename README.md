@@ -13,11 +13,9 @@ Entry point with links to:
 
 ## Hardware Sketches
 
-- **`firmware/controller-cyd/showduino_cyd_director_v1/`** — **5" 800×400** director UI (Arduino IDE)
-- `UI_8048S043_ESPNOW/` — Arduino IDE sketch for ESP32-8048S043 (4.3")
-- `UI_RGB_8048_ESPNOW/` — PlatformIO version
-- `UI_FULL_CYD_ESPNOW_FASTLED/` — legacy 2.4" CYD (320×240, XPT2046)
-- `SUE_ESPNOW_FASTLED_SINGLEPIXEL/` — Brain LED receiver
+- **`firmware/controller-cyd/showduino_cyd_director_v1/`** — **2.8" CYD** Mega director (TFT_eSPI + XPT2046_Bitbang)
+- `UI_8048S043_ESPNOW/` — 4.3" 800×480 RGB (Arduino IDE, esp32-smartdisplay)
+- `UI_RGB_8048_ESPNOW/` — PlatformIO RGB panels (4.3" / 5")
 
 ## API (SUE Brain)
 

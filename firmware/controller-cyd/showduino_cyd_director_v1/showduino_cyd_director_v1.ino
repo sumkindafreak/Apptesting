@@ -1,414 +1,338 @@
 /*
-  Showduino CYD Director v1
-  5" RGB panel — 800x400, ESP32-S3 (ESP32-8048S050 class)
-  GT911 capacitive touch via esp32-smartdisplay (NOT XPT2046_Bitbang)
+  =========================================================
+  Showduino v1 - CYD Director Test Firmware
+  =========================================================
 
-  UI desk only. Sends ESP-NOW commands to SUE (Brain).
+  Target board:
+    ESP32-2432S028R / CYD 2.8 inch touchscreen (320x240)
+
+  Purpose:
+    Tonight-ready controller firmware.
+    This CYD does not drive show hardware directly.
+    It sends serial commands to the Arduino Mega Stage Engine.
+
+  Mega firmware expected:
+    firmware/executor-mega/showduino_mega_v1/showduino_mega_v1.ino
+
+  Required libraries:
+    - TFT_eSPI
+    - XPT2046_Bitbang  (uses Point + getTouch(), NOT touched()/TS_Point)
+
+  Wiring:
+    CYD TX pin 1  -> Mega RX1 pin 19
+    CYD RX pin 3  -> Mega TX1 pin 18
+    CYD GND       -> Mega GND
+
+  Serial:
+    115200 baud
 */
 
 #include <Arduino.h>
-#include <WiFi.h>
-#include <esp_now.h>
-#include <esp_wifi.h>
-#include <esp32_smartdisplay.h>
+#include <TFT_eSPI.h>
 
-#ifndef BOARD_NAME
-#define BOARD_NAME "esp32-8048S050C_400"
-#endif
+// Landscape CYD: 320 wide x 240 tall (must be set before Bitbang include)
+#define TFT_WIDTH  320
+#define TFT_HEIGHT 240
+#include "XPT2046_Bitbang.h"
 
-#ifndef DISPLAY_WIDTH
-#define DISPLAY_WIDTH 800
-#endif
-#ifndef DISPLAY_HEIGHT
-#define DISPLAY_HEIGHT 400
-#endif
+// =========================================================
+// Serial pins to Mega
+// =========================================================
 
-// GoreFX palette
-static const uint32_t COLOR_BG      = 0x0A0A0A;
-static const uint32_t COLOR_PANEL   = 0x1A0A1A;
-static const uint32_t COLOR_ACCENT  = 0xFF0044;
-static const uint32_t COLOR_TEXT    = 0xE0E0E0;
-static const uint32_t COLOR_MUTED   = 0x707070;
-static const uint32_t COLOR_BORDER  = 0x3A1A3A;
-static const uint32_t COLOR_OK      = 0x00AA00;
-static const uint32_t COLOR_OFF     = 0x660000;
+#define MEGA_RX_PIN 3
+#define MEGA_TX_PIN 1
+#define MEGA_BAUD_RATE 115200
+#define USB_BAUD_RATE 115200
 
-// SUE STA MAC — update to match your Brain
-static uint8_t SUE_MAC[6] = {0x20, 0x6E, 0xF1, 0x99, 0x83, 0x94};
-static const uint8_t ESPNOW_CHANNEL = 1;
+// =========================================================
+// Touchscreen pins
+// =========================================================
 
-static volatile bool ledOn = false;
-static volatile uint8_t uiR = 255;
-static volatile uint8_t uiG = 0;
-static volatile uint8_t uiB = 68;
-static volatile uint8_t uiBri = 200;
-static volatile bool pendingSendRGB = false;
-static volatile bool pendingSendToggle = false;
-static uint32_t lastSendMs = 0;
+#define XPT2046_IRQ  36
+#define XPT2046_MOSI 32
+#define XPT2046_MISO 39
+#define XPT2046_CLK  25
+#define XPT2046_CS   33
 
-static lv_obj_t *scr_main = nullptr;
-static lv_obj_t *scr_led = nullptr;
-static lv_obj_t *lbl_status_main = nullptr;
-static lv_obj_t *lbl_status_led = nullptr;
-static lv_obj_t *lbl_rgb = nullptr;
-static lv_obj_t *lbl_led_state = nullptr;
-static lv_obj_t *btn_toggle = nullptr;
-static lv_obj_t *btn_toggle_label = nullptr;
-static lv_obj_t *preview_box = nullptr;
-static lv_obj_t *slider_r = nullptr;
-static lv_obj_t *slider_g = nullptr;
-static lv_obj_t *slider_b = nullptr;
-static lv_obj_t *slider_bri = nullptr;
+// =========================================================
+// CYD pins
+// =========================================================
 
-static lv_style_t style_screen;
-static lv_style_t style_title;
-static lv_style_t style_subtitle;
-static lv_style_t style_card;
-static lv_style_t style_card_title;
-static lv_style_t style_status;
+#define BACKLIGHT_PIN 21
+#define CYD_LED_BLUE  17
+#define CYD_LED_RED   4
+#define CYD_LED_GREEN 16
 
-static void printMac(const uint8_t *mac) {
-  for (int i = 0; i < 6; i++) {
-    if (mac[i] < 16) Serial.print('0');
-    Serial.print(mac[i], HEX);
-    if (i < 5) Serial.print(':');
+// =========================================================
+// Colours
+// =========================================================
+
+#define COL_BG      TFT_BLACK
+#define COL_HEADER  0x2104
+#define COL_PANEL   0x1082
+#define COL_TEXT    TFT_WHITE
+#define COL_DIM     0x8410
+#define COL_BUTTON  0x3186
+#define COL_ACCENT  TFT_CYAN
+#define COL_WARN    TFT_ORANGE
+#define COL_ERROR   TFT_RED
+#define COL_OK      TFT_GREEN
+
+// =========================================================
+// Display/touch objects
+// =========================================================
+
+TFT_eSPI tft = TFT_eSPI();
+XPT2046_Bitbang touch(XPT2046_MOSI, XPT2046_MISO, XPT2046_CLK, XPT2046_CS);
+
+// =========================================================
+// Button structure
+// =========================================================
+
+struct Button {
+  int16_t x;
+  int16_t y;
+  int16_t w;
+  int16_t h;
+  const char* label;
+  const char* command;
+  uint16_t colour;
+};
+
+Button buttons[] = {
+  {  10,  46, 145, 38, "HEARTBEAT", "HEARTBEAT", COL_BUTTON },
+  { 165,  46, 145, 38, "STATUS", "STATUS:REQUEST", COL_BUTTON },
+
+  {  10,  92, 145, 42, "SCENE TEST", "SCENE:TEST", COL_ACCENT },
+  { 165,  92, 145, 42, "SCENE STOP", "SCENE:STOP", COL_BUTTON },
+
+  {  10, 142, 145, 38, "PIXEL BLACKOUT", "PIXEL:ALL:BLACKOUT", COL_BUTTON },
+  { 165, 142, 145, 38, "AUDIO 001", "AUDIO:PLAY:001", COL_BUTTON },
+
+  {  10, 188,  68, 38, "P1", "PIXEL:1:EFFECT:PULSE", COL_BUTTON },
+  {  86, 188,  68, 38, "P2", "PIXEL:2:EFFECT:FIRE", COL_BUTTON },
+  { 162, 188,  68, 38, "P3", "PIXEL:3:EFFECT:STROBE", COL_BUTTON },
+  { 238, 188,  72, 38, "P4", "PIXEL:4:COLOR:0,0,255", COL_BUTTON },
+
+  {  10, 236, 300, 58, "EMERGENCY STOP", "EMERGENCY:STOP", COL_ERROR }
+};
+
+const uint8_t BUTTON_COUNT = sizeof(buttons) / sizeof(buttons[0]);
+
+// =========================================================
+// State
+// =========================================================
+
+String megaBuffer = "";
+String lastMegaMessage = "No Mega message yet";
+String lastCommandSent = "None";
+unsigned long lastHeartbeatMs = 0;
+unsigned long lastTouchMs = 0;
+bool megaAlive = false;
+
+// =========================================================
+// CYD RGB LED helper. Most CYD boards use active LOW LEDs.
+// =========================================================
+
+void setCydLed(bool redOn, bool greenOn, bool blueOn) {
+  digitalWrite(CYD_LED_RED, redOn ? LOW : HIGH);
+  digitalWrite(CYD_LED_GREEN, greenOn ? LOW : HIGH);
+  digitalWrite(CYD_LED_BLUE, blueOn ? LOW : HIGH);
+}
+
+// =========================================================
+// Draw helpers
+// =========================================================
+
+void drawHeader() {
+  tft.fillRect(0, 0, 320, 36, COL_HEADER);
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(COL_TEXT, COL_HEADER);
+  tft.drawString("SHOWDUINO v1 DIRECTOR", 8, 18, 2);
+
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(megaAlive ? COL_OK : COL_WARN, COL_HEADER);
+  tft.drawString(megaAlive ? "MEGA OK" : "MEGA ?", 312, 18, 2);
+}
+
+void drawButton(const Button& b) {
+  tft.fillRoundRect(b.x, b.y, b.w, b.h, 6, b.colour);
+  tft.drawRoundRect(b.x, b.y, b.w, b.h, 6, TFT_WHITE);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(COL_TEXT, b.colour);
+  tft.drawString(b.label, b.x + b.w / 2, b.y + b.h / 2, 2);
+}
+
+void drawMegaMessage() {
+  tft.fillRect(0, 296, 320, 24, COL_PANEL);
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(COL_DIM, COL_PANEL);
+  tft.drawString("RX:", 4, 308, 1);
+  tft.setTextColor(COL_TEXT, COL_PANEL);
+  String rx = lastMegaMessage;
+  if (rx.length() > 34) rx = rx.substring(0, 34);
+  tft.drawString(rx, 24, 308, 1);
+}
+
+void drawScreen() {
+  tft.fillScreen(COL_BG);
+  drawHeader();
+
+  for (uint8_t i = 0; i < BUTTON_COUNT; i++) {
+    drawButton(buttons[i]);
+  }
+
+  drawMegaMessage();
+}
+
+// =========================================================
+// Serial commands
+// =========================================================
+
+void sendToMega(const String& command) {
+  Serial2.println(command);
+  Serial.print("[CYD -> MEGA] ");
+  Serial.println(command);
+
+  lastCommandSent = command;
+  setCydLed(false, false, true);
+  delay(20);
+  setCydLed(false, false, false);
+
+  drawHeader();
+  drawMegaMessage();
+}
+
+void handleMegaLine(String line) {
+  line.trim();
+  if (line.length() == 0) return;
+
+  Serial.print("[MEGA -> CYD] ");
+  Serial.println(line);
+
+  lastMegaMessage = line;
+
+  if (line == "STATUS:ALIVE" || line == "STATUS:READY") {
+    megaAlive = true;
+    setCydLed(false, true, false);
+  }
+
+  if (line == "STATUS:EMERGENCY_ACTIVE") {
+    megaAlive = true;
+    setCydLed(true, false, false);
+  }
+
+  drawHeader();
+  drawMegaMessage();
+}
+
+void readMegaSerial() {
+  while (Serial2.available() > 0) {
+    char c = Serial2.read();
+
+    if (c == '\r') continue;
+
+    if (c == '\n') {
+      handleMegaLine(megaBuffer);
+      megaBuffer = "";
+    } else {
+      if (megaBuffer.length() < 120) {
+        megaBuffer += c;
+      } else {
+        megaBuffer = "";
+      }
+    }
   }
 }
 
-static void setStatus(lv_obj_t *label, const char *text) {
-  if (label) lv_label_set_text(label, text);
-}
+// =========================================================
+// Touch handling — XPT2046_Bitbang API (Point + getTouch)
+// =========================================================
 
-static void updateRgbLabel() {
-  if (!lbl_rgb) return;
-  char buf[48];
-  snprintf(buf, sizeof(buf), "RGB %u,%u,%u  BRI %u", uiR, uiG, uiB, uiBri);
-  lv_label_set_text(lbl_rgb, buf);
-}
-
-static void updatePreview() {
-  if (!preview_box) return;
-  const float scale = ledOn ? (uiBri / 255.0f) : 0.0f;
-  const uint8_t r = (uint8_t)(uiR * scale);
-  const uint8_t g = (uint8_t)(uiG * scale);
-  const uint8_t b = (uint8_t)(uiB * scale);
-  lv_obj_set_style_bg_color(preview_box, lv_color_make(r, g, b), 0);
-  lv_obj_set_style_shadow_color(preview_box, lv_color_make(uiR, uiG, uiB), 0);
-  lv_obj_set_style_shadow_width(preview_box, ledOn ? 30 : 0, 0);
-}
-
-static void updateLedButton() {
-  if (!btn_toggle || !btn_toggle_label || !lbl_led_state) return;
-  if (ledOn) {
-    lv_label_set_text(btn_toggle_label, "LED ON");
-    lv_obj_set_style_bg_color(btn_toggle, lv_color_hex(COLOR_OK), 0);
-    lv_label_set_text(lbl_led_state, "Output: ON");
-  } else {
-    lv_label_set_text(btn_toggle_label, "LED OFF");
-    lv_obj_set_style_bg_color(btn_toggle, lv_color_hex(COLOR_OFF), 0);
-    lv_label_set_text(lbl_led_state, "Output: OFF");
-  }
-  updatePreview();
-}
-
-static bool espnowSend(const char *msg) {
-  const esp_err_t err = esp_now_send(SUE_MAC, (const uint8_t *)msg, strlen(msg));
-  if (err != ESP_OK) {
-    Serial.printf("[TX] esp_now_send failed: %d\n", err);
+bool getTouchPoint(int16_t& x, int16_t& y) {
+  // IRQ is active LOW when the panel is pressed on most CYD boards
+  if (digitalRead(XPT2046_IRQ) == HIGH) {
     return false;
   }
+
+  Point p = touch.getTouch();
+
+  x = (int16_t)p.x;
+  y = (int16_t)p.y;
+
+  // If X/Y are swapped for your panel, uncomment:
+  // int16_t tmp = x; x = y; y = tmp;
+
+  x = constrain(x, 0, 319);
+  y = constrain(y, 0, 239);
+
   return true;
 }
 
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-static void onDataReceived(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-  const uint8_t *mac = info->src_addr;
-#else
-static void onDataReceived(const uint8_t *mac, const uint8_t *data, int len) {
-#endif
-  char buf[80];
-  const int n = (len < (int)sizeof(buf) - 1) ? len : (int)sizeof(buf) - 1;
-  memcpy(buf, data, n);
-  buf[n] = '\0';
-  Serial.print("[RX] From ");
-  printMac(mac);
-  Serial.printf(" msg='%s'\n", buf);
-  int st = -1;
-  if (sscanf(buf, "STATE %d", &st) == 1) {
-    ledOn = (st != 0);
-    updateLedButton();
-  }
-}
+void handleTouch() {
+  if (millis() - lastTouchMs < 250) return;
 
-static bool initEspNow() {
-  if (esp_now_init() != ESP_OK) return false;
-  esp_now_register_recv_cb(onDataReceived);
-  esp_now_peer_info_t peer = {};
-  memcpy(peer.peer_addr, SUE_MAC, 6);
-  peer.channel = ESPNOW_CHANNEL;
-  peer.encrypt = false;
-  return esp_now_add_peer(&peer) == ESP_OK;
-}
+  int16_t tx, ty;
+  if (!getTouchPoint(tx, ty)) return;
 
-static void sendRGB(uint8_t r, uint8_t g, uint8_t b, uint8_t bri) {
-  char msg[48];
-  snprintf(msg, sizeof(msg), "RGB %u %u %u %u", r, g, b, bri);
-  const bool ok = espnowSend(msg);
-  setStatus(lbl_status_led, ok ? "ESP-NOW: RGB sent" : "ESP-NOW: send failed");
-}
+  lastTouchMs = millis();
 
-static void sendToggle() {
-  const bool ok = espnowSend("TOG");
-  setStatus(lbl_status_led, ok ? "ESP-NOW: toggle sent" : "ESP-NOW: send failed");
-}
+  for (uint8_t i = 0; i < BUTTON_COUNT; i++) {
+    Button& b = buttons[i];
 
-static lv_obj_t *make_card(lv_obj_t *parent, const char *icon, const char *title, const char *desc, lv_event_cb_t cb) {
-  lv_obj_t *card = lv_obj_create(parent);
-  lv_obj_remove_style_all(card);
-  lv_obj_add_style(card, &style_card, 0);
-  lv_obj_set_size(card, lv_pct(48), 118);
-  lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(card, cb, LV_EVENT_CLICKED, nullptr);
-
-  lv_obj_t *icon_lbl = lv_label_create(card);
-  lv_label_set_text(icon_lbl, icon);
-  lv_obj_set_style_text_font(icon_lbl, &lv_font_montserrat_28, 0);
-  lv_obj_align(icon_lbl, LV_ALIGN_TOP_MID, 0, 8);
-
-  lv_obj_t *title_lbl = lv_label_create(card);
-  lv_label_set_text(title_lbl, title);
-  lv_obj_add_style(title_lbl, &style_card_title, 0);
-  lv_obj_align(title_lbl, LV_ALIGN_TOP_MID, 0, 44);
-
-  lv_obj_t *desc_lbl = lv_label_create(card);
-  lv_label_set_text(desc_lbl, desc);
-  lv_obj_set_style_text_color(desc_lbl, lv_color_hex(COLOR_MUTED), 0);
-  lv_obj_set_style_text_font(desc_lbl, &lv_font_montserrat_14, 0);
-  lv_obj_align(desc_lbl, LV_ALIGN_TOP_MID, 0, 72);
-
-  return card;
-}
-
-static void go_main_event(lv_event_t *e) {
-  if (lv_event_get_code(e) == LV_EVENT_CLICKED) lv_screen_load(scr_main);
-}
-
-static void go_led_event(lv_event_t *e) {
-  if (lv_event_get_code(e) == LV_EVENT_CLICKED) lv_screen_load(scr_led);
-}
-
-static void coming_soon_event(lv_event_t *e) {
-  if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-    setStatus(lbl_status_main, "Coming soon — wired in next build");
-  }
-}
-
-static void btn_toggle_event(lv_event_t *e) {
-  if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-    pendingSendToggle = true;
-    ledOn = !ledOn;
-    updateLedButton();
-  }
-}
-
-static void slider_event(lv_event_t *e) {
-  if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
-  uiR = (uint8_t)lv_slider_get_value(slider_r);
-  uiG = (uint8_t)lv_slider_get_value(slider_g);
-  uiB = (uint8_t)lv_slider_get_value(slider_b);
-  uiBri = (uint8_t)lv_slider_get_value(slider_bri);
-  updateRgbLabel();
-  updatePreview();
-  pendingSendRGB = true;
-}
-
-static lv_obj_t *make_slider_row(lv_obj_t *parent, const char *name, int y, uint8_t value, lv_obj_t **out_slider) {
-  lv_obj_t *lbl = lv_label_create(parent);
-  lv_label_set_text(lbl, name);
-  lv_obj_set_style_text_color(lbl, lv_color_hex(COLOR_MUTED), 0);
-  lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 20, y);
-
-  lv_obj_t *slider = lv_slider_create(parent);
-  lv_slider_set_range(slider, 0, 255);
-  lv_slider_set_value(slider, value, LV_ANIM_OFF);
-  lv_obj_set_width(slider, 560);
-  lv_obj_align(slider, LV_ALIGN_TOP_LEFT, 100, y + 2);
-  lv_obj_add_event_cb(slider, slider_event, LV_EVENT_VALUE_CHANGED, nullptr);
-  *out_slider = slider;
-  return slider;
-}
-
-static void init_theme() {
-  lv_style_init(&style_screen);
-  lv_style_set_bg_color(&style_screen, lv_color_hex(COLOR_BG));
-  lv_style_set_bg_opa(&style_screen, LV_OPA_COVER);
-
-  lv_style_init(&style_title);
-  lv_style_set_text_color(&style_title, lv_color_hex(COLOR_ACCENT));
-  lv_style_set_text_font(&style_title, &lv_font_montserrat_32);
-
-  lv_style_init(&style_subtitle);
-  lv_style_set_text_color(&style_subtitle, lv_color_hex(COLOR_MUTED));
-  lv_style_set_text_font(&style_subtitle, &lv_font_montserrat_14);
-
-  lv_style_init(&style_card);
-  lv_style_set_bg_color(&style_card, lv_color_hex(COLOR_PANEL));
-  lv_style_set_bg_opa(&style_card, LV_OPA_COVER);
-  lv_style_set_border_color(&style_card, lv_color_hex(COLOR_BORDER));
-  lv_style_set_border_width(&style_card, 2);
-  lv_style_set_radius(&style_card, 14);
-  lv_style_set_pad_all(&style_card, 10);
-
-  lv_style_init(&style_card_title);
-  lv_style_set_text_color(&style_card_title, lv_color_hex(COLOR_TEXT));
-  lv_style_set_text_font(&style_card_title, &lv_font_montserrat_20);
-
-  lv_style_init(&style_status);
-  lv_style_set_text_color(&style_status, lv_color_hex(COLOR_MUTED));
-  lv_style_set_text_font(&style_status, &lv_font_montserrat_14);
-}
-
-static void create_main_menu() {
-  scr_main = lv_obj_create(nullptr);
-  lv_obj_add_style(scr_main, &style_screen, 0);
-
-  lv_obj_t *title = lv_label_create(scr_main);
-  lv_label_set_text(title, "SHOWDUINO");
-  lv_obj_add_style(title, &style_title, 0);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 16);
-
-  lv_obj_t *subtitle = lv_label_create(scr_main);
-  lv_label_set_text(subtitle, "Director — 5\" 800x400");
-  lv_obj_add_style(subtitle, &style_subtitle, 0);
-  lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 52);
-
-  lv_obj_t *grid = lv_obj_create(scr_main);
-  lv_obj_remove_style_all(grid);
-  lv_obj_set_size(grid, 760, 250);
-  lv_obj_align(grid, LV_ALIGN_CENTER, 0, 10);
-  lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
-  lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_row(grid, 12, 0);
-  lv_obj_set_style_pad_column(grid, 12, 0);
-
-  make_card(grid, LV_SYMBOL_EDIT, "Studio", "Timeline & Show Builder", coming_soon_event);
-  make_card(grid, LV_SYMBOL_IMAGE, "LED Control", "Pixel FX & Lighting", go_led_event);
-  make_card(grid, LV_SYMBOL_WIFI, "HauntSync", "Network Dashboard", coming_soon_event);
-  make_card(grid, LV_SYMBOL_SETTINGS, "System", "Wi-Fi & Settings", coming_soon_event);
-
-  lbl_status_main = lv_label_create(scr_main);
-  lv_label_set_text(lbl_status_main, "ESP-NOW ready — tap LED Control");
-  lv_obj_add_style(lbl_status_main, &style_status, 0);
-  lv_obj_align(lbl_status_main, LV_ALIGN_BOTTOM_MID, 0, -10);
-}
-
-static void create_led_screen() {
-  scr_led = lv_obj_create(nullptr);
-  lv_obj_add_style(scr_led, &style_screen, 0);
-
-  lv_obj_t *back = lv_button_create(scr_led);
-  lv_obj_set_size(back, 120, 36);
-  lv_obj_align(back, LV_ALIGN_TOP_LEFT, 12, 8);
-  lv_obj_add_event_cb(back, go_main_event, LV_EVENT_CLICKED, nullptr);
-  lv_obj_t *back_lbl = lv_label_create(back);
-  lv_label_set_text(back_lbl, LV_SYMBOL_LEFT " Menu");
-  lv_obj_center(back_lbl);
-
-  lv_obj_t *title = lv_label_create(scr_led);
-  lv_label_set_text(title, "LED Control");
-  lv_obj_add_style(title, &style_card_title, 0);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 14);
-
-  preview_box = lv_obj_create(scr_led);
-  lv_obj_set_size(preview_box, 80, 80);
-  lv_obj_set_style_radius(preview_box, 12, 0);
-  lv_obj_set_style_border_color(preview_box, lv_color_hex(COLOR_BORDER), 0);
-  lv_obj_set_style_border_width(preview_box, 2, 0);
-  lv_obj_align(preview_box, LV_ALIGN_TOP_RIGHT, -24, 12);
-
-  btn_toggle = lv_button_create(scr_led);
-  lv_obj_set_size(btn_toggle, 180, 44);
-  lv_obj_align(btn_toggle, LV_ALIGN_TOP_MID, 0, 52);
-  lv_obj_add_event_cb(btn_toggle, btn_toggle_event, LV_EVENT_CLICKED, nullptr);
-  btn_toggle_label = lv_label_create(btn_toggle);
-  lv_label_set_text(btn_toggle_label, "LED OFF");
-  lv_obj_center(btn_toggle_label);
-
-  lbl_led_state = lv_label_create(scr_led);
-  lv_label_set_text(lbl_led_state, "Output: OFF");
-  lv_obj_set_style_text_color(lbl_led_state, lv_color_hex(COLOR_MUTED), 0);
-  lv_obj_align(lbl_led_state, LV_ALIGN_TOP_MID, 0, 102);
-
-  lbl_rgb = lv_label_create(scr_led);
-  lv_label_set_text(lbl_rgb, "RGB 255,0,68  BRI 200");
-  lv_obj_align(lbl_rgb, LV_ALIGN_TOP_MID, 0, 122);
-
-  make_slider_row(scr_led, "Red", 155, uiR, &slider_r);
-  make_slider_row(scr_led, "Green", 190, uiG, &slider_g);
-  make_slider_row(scr_led, "Blue", 225, uiB, &slider_b);
-  make_slider_row(scr_led, "Brightness", 260, uiBri, &slider_bri);
-
-  lbl_status_led = lv_label_create(scr_led);
-  lv_label_set_text(lbl_status_led, "ESP-NOW: waiting");
-  lv_obj_add_style(lbl_status_led, &style_status, 0);
-  lv_obj_align(lbl_status_led, LV_ALIGN_BOTTOM_MID, 0, -10);
-
-  updateLedButton();
-}
-
-void setup() {
-#ifdef ARDUINO_USB_CDC_ON_BOOT
-  delay(2000);
-#endif
-  Serial.begin(115200);
-  Serial.println();
-  Serial.println("=====================================");
-  Serial.printf("Showduino Director — 5\" %dx%d\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
-  Serial.printf("Board: %s\n", BOARD_NAME);
-  Serial.println("=====================================");
-
-  smartdisplay_init();
-  smartdisplay_lcd_set_backlight(0.85f);
-
-  init_theme();
-  create_main_menu();
-  create_led_screen();
-  lv_screen_load(scr_main);
-
-  WiFi.persistent(false);
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect(false);
-  WiFi.setSleep(false);
-  esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
-
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
-  Serial.print("[WiFi] UI STA MAC: ");
-  printMac(mac);
-  Serial.println();
-
-  const bool ok = initEspNow();
-  setStatus(lbl_status_main, ok ? "ESP-NOW ready — tap LED Control" : "ESP-NOW init failed");
-}
-
-static uint32_t lv_last_tick = 0;
-
-void loop() {
-  const uint32_t now = millis();
-  lv_tick_inc(now - lv_last_tick);
-  lv_last_tick = now;
-  lv_timer_handler();
-
-  if (now - lastSendMs >= 80) {
-    if (pendingSendToggle) {
-      pendingSendToggle = false;
-      lastSendMs = now;
-      sendToggle();
-    } else if (pendingSendRGB) {
-      pendingSendRGB = false;
-      lastSendMs = now;
-      sendRGB(uiR, uiG, uiB, uiBri);
+    if (tx >= b.x && tx <= b.x + b.w && ty >= b.y && ty <= b.y + b.h) {
+      drawButton(b);
+      sendToMega(String(b.command));
+      return;
     }
   }
-  delay(2);
+}
+
+// =========================================================
+// Periodic heartbeat
+// =========================================================
+
+void updateHeartbeat() {
+  if (millis() - lastHeartbeatMs >= 5000) {
+    lastHeartbeatMs = millis();
+    sendToMega("HEARTBEAT");
+  }
+}
+
+// =========================================================
+// Arduino setup/loop
+// =========================================================
+
+void setup() {
+  Serial.begin(USB_BAUD_RATE);
+  Serial2.begin(MEGA_BAUD_RATE, SERIAL_8N1, MEGA_RX_PIN, MEGA_TX_PIN);
+
+  pinMode(BACKLIGHT_PIN, OUTPUT);
+  digitalWrite(BACKLIGHT_PIN, HIGH);
+
+  pinMode(XPT2046_IRQ, INPUT);
+  pinMode(CYD_LED_RED, OUTPUT);
+  pinMode(CYD_LED_GREEN, OUTPUT);
+  pinMode(CYD_LED_BLUE, OUTPUT);
+  setCydLed(false, false, false);
+
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(COL_BG);
+
+  touch.begin();
+
+  Serial.println();
+  Serial.println("==============================================");
+  Serial.println("Showduino v1 CYD Director Test Firmware");
+  Serial.println("==============================================");
+
+  drawScreen();
+  sendToMega("HEARTBEAT");
+}
+
+void loop() {
+  readMegaSerial();
+  handleTouch();
+  updateHeartbeat();
 }
