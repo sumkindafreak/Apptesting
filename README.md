@@ -13,10 +13,11 @@ Entry point with links to:
 
 ## Hardware Sketches
 
-- **`UI_8048S043_ESPNOW/`** — **Arduino IDE** sketch for ESP32-8048S043 (recommended)
-- `UI_RGB_8048_ESPNOW/` — PlatformIO version (same firmware)
-- `UI_FULL_CYD_ESPNOW_FASTLED/` — legacy 320×240 CYD UI (ESP-NOW sender)
-- `SUE_ESPNOW_FASTLED_SINGLEPIXEL/` — Brain LED receiver (ESP-NOW + FastLED)
+- **`firmware/controller-cyd/showduino_cyd_director_v1/`** — **5" 800×400** director UI (Arduino IDE)
+- `UI_8048S043_ESPNOW/` — Arduino IDE sketch for ESP32-8048S043 (4.3")
+- `UI_RGB_8048_ESPNOW/` — PlatformIO version
+- `UI_FULL_CYD_ESPNOW_FASTLED/` — legacy 2.4" CYD (320×240, XPT2046)
+- `SUE_ESPNOW_FASTLED_SINGLEPIXEL/` — Brain LED receiver
 
 ## API (SUE Brain)
 
