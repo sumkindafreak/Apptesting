@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes" />
+  <title>LED Control - Showduino Studio</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .preview-pixel {
+      width: 120px;
+      height: 120px;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      margin: 1rem auto;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+      transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .line-tabs {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .line-tab {
+      padding: 0.5rem 1rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .line-tab.active {
+      border-color: var(--haunt-red);
+      color: var(--haunt-red);
+      background: var(--bg-active);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+
+    .connection-banner {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+    }
+
+    .connection-banner.online {
+      border-color: var(--success);
+      color: var(--success);
+      background: rgba(68, 255, 68, 0.08);
+    }
+
+    .connection-banner.offline {
+      border-color: var(--text-muted);
+      color: var(--text-secondary);
+      background: rgba(112, 112, 112, 0.08);
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <h1>LED Control</h1>
+    <a href="index.html" class="back-link">← Main Menu</a>
+  </header>
+
+  <main class="page-content">
+    <div id="connectionBanner" class="connection-banner offline">Checking SUE connection...</div>
+
+    <div class="card">
+      <h2>Pixel Lines</h2>
+      <div class="line-tabs" id="lineTabs"></div>
+      <div class="preview-pixel" id="previewPixel"></div>
+      <p style="text-align:center;color:var(--text-secondary);font-size:0.85rem;">
+        Line <span id="activeLineLabel">1</span> · Pixel <span id="activePixelLabel">0</span>
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Color & Brightness</h2>
+      <div class="slider-row">
+        <label for="sliderR">Red</label>
+        <input type="range" id="sliderR" min="0" max="255" value="255" />
+        <span class="value" id="valR">255</span>
+      </div>
+      <div class="slider-row">
+        <label for="sliderG">Green</label>
+        <input type="range" id="sliderG" min="0" max="255" value="0" />
+        <span class="value" id="valG">0</span>
+      </div>
+      <div class="slider-row">
+        <label for="sliderB">Blue</label>
+        <input type="range" id="sliderB" min="0" max="255" value="68" />
+        <span class="value" id="valB">68</span>
+      </div>
+      <div class="slider-row">
+        <label for="sliderBri">Brightness</label>
+        <input type="range" id="sliderBri" min="0" max="255" value="200" />
+        <span class="value" id="valBri">200</span>
+      </div>
+      <div class="slider-row">
+        <label for="sliderPixel">Pixel</label>
+        <input type="range" id="sliderPixel" min="0" max="49" value="0" />
+        <span class="value" id="valPixel">0</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Output</h2>
+      <p>
+        <span class="status-dot off" id="ledDot"></span>
+        <span id="ledStateLabel">OFF</span>
+      </p>
+      <div class="button-row">
+        <button class="btn" id="btnToggle">Toggle LED</button>
+        <button class="btn btn-secondary" id="btnOff">All Off</button>
+        <button class="btn btn-secondary" id="btnApply">Apply Color</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const state = {
+      line: 1,
+      pixel: 0,
+      r: 255,
+      g: 0,
+      b: 68,
+      bri: 200,
+      on: false,
+      lines: 4,
+      connected: false
+    };
+
+    const els = {
+      lineTabs: document.getElementById('lineTabs'),
+      preview: document.getElementById('previewPixel'),
+      ledDot: document.getElementById('ledDot'),
+      ledStateLabel: document.getElementById('ledStateLabel'),
+      banner: document.getElementById('connectionBanner'),
+      activeLineLabel: document.getElementById('activeLineLabel'),
+      activePixelLabel: document.getElementById('activePixelLabel')
+    };
+
+    function bindSlider(id, key, valId, onChange) {
+      const slider = document.getElementById(id);
+      const val = document.getElementById(valId);
+      slider.addEventListener('input', () => {
+        state[key] = Number(slider.value);
+        val.textContent = slider.value;
+        onChange();
+      });
+    }
+
+    function updatePreview() {
+      const { r, g, b, bri, on } = state;
+      const scale = on ? bri / 255 : 0;
+      const color = `rgb(${Math.round(r * scale)}, ${Math.round(g * scale)}, ${Math.round(b * scale)})`;
+      els.preview.style.backgroundColor = color;
+      els.preview.style.boxShadow = on ? `0 0 40px rgba(${r}, ${g}, ${b}, 0.4)` : 'none';
+      els.ledDot.className = 'status-dot ' + (on ? 'on' : 'off');
+      els.ledStateLabel.textContent = on ? 'ON' : 'OFF';
+      els.activeLineLabel.textContent = state.line;
+      els.activePixelLabel.textContent = state.pixel;
+    }
+
+    function renderLineTabs() {
+      els.lineTabs.innerHTML = '';
+      for (let i = 1; i <= state.lines; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'line-tab' + (i === state.line ? ' active' : '');
+        btn.textContent = 'Line ' + i;
+        btn.addEventListener('click', () => {
+          state.line = i;
+          renderLineTabs();
+          sendCommand('led', { line: state.line, pixel: state.pixel, brightness: state.on ? state.bri : 0 });
+        });
+        els.lineTabs.appendChild(btn);
+      }
+    }
+
+    async function sendCommand(cmd, payload) {
+      const body = { cmd, ...payload };
+      try {
+        const res = await fetch('/api/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('Command failed');
+        setConnection(true);
+      } catch (err) {
+        console.warn('SUE command (local preview only):', body);
+        setConnection(false);
+      }
+      updatePreview();
+    }
+
+    function setConnection(online) {
+      state.connected = online;
+      els.banner.className = 'connection-banner ' + (online ? 'online' : 'offline');
+      els.banner.textContent = online
+        ? 'Connected to SUE — commands sent to Brain'
+        : 'SUE offline — adjusting local preview only';
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) throw new Error('offline');
+        const data = await res.json();
+        setConnection(true);
+        if (data.led && data.led.lines) {
+          state.lines = data.led.lines;
+          renderLineTabs();
+        }
+        if (data.led && data.led.brightness) {
+          const idx = state.line - 1;
+          if (data.led.brightness[idx] !== undefined) {
+            state.bri = data.led.brightness[idx];
+            document.getElementById('sliderBri').value = state.bri;
+            document.getElementById('valBri').textContent = state.bri;
+          }
+        }
+      } catch (err) {
+        setConnection(false);
+      }
+    }
+
+    bindSlider('sliderR', 'r', 'valR', () => sendCommand('led', {
+      line: state.line, pixel: state.pixel, r: state.r, g: state.g, b: state.b, brightness: state.bri
+    }));
+    bindSlider('sliderG', 'g', 'valG', () => sendCommand('led', {
+      line: state.line, pixel: state.pixel, r: state.r, g: state.g, b: state.b, brightness: state.bri
+    }));
+    bindSlider('sliderB', 'b', 'valB', () => sendCommand('led', {
+      line: state.line, pixel: state.pixel, r: state.r, g: state.g, b: state.b, brightness: state.bri
+    }));
+    bindSlider('sliderBri', 'bri', 'valBri', () => sendCommand('led', {
+      line: state.line, pixel: state.pixel, brightness: state.bri
+    }));
+    bindSlider('sliderPixel', 'pixel', 'valPixel', updatePreview);
+
+    document.getElementById('btnToggle').addEventListener('click', () => {
+      state.on = !state.on;
+      sendCommand('led', { line: state.line, pixel: state.pixel, r: state.r, g: state.g, b: state.b, brightness: state.on ? state.bri : 0 });
+    });
+
+    document.getElementById('btnOff').addEventListener('click', () => {
+      state.on = false;
+      sendCommand('led', { line: state.line, all: true, brightness: 0 });
+    });
+
+    document.getElementById('btnApply').addEventListener('click', () => {
+      state.on = true;
+      sendCommand('led', { line: state.line, pixel: state.pixel, r: state.r, g: state.g, b: state.b, brightness: state.bri });
+    });
+
+    renderLineTabs();
+    updatePreview();
+    pollStatus();
+    setInterval(pollStatus, 3000);
+  </script>
+</body>
+</html>
