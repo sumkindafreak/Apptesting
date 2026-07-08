@@ -13,7 +13,8 @@ Entry point with links to:
 
 ## Hardware Sketches
 
-- `UI_RGB_8048_ESPNOW/` — **ESP32-8048S043** UI (800×480 RGB, GT911, LVGL + ESP-NOW)
+- **`UI_8048S043_ESPNOW/`** — **Arduino IDE** sketch for ESP32-8048S043 (recommended)
+- `UI_RGB_8048_ESPNOW/` — PlatformIO version (same firmware)
 - `UI_FULL_CYD_ESPNOW_FASTLED/` — legacy 320×240 CYD UI (ESP-NOW sender)
 - `SUE_ESPNOW_FASTLED_SINGLEPIXEL/` — Brain LED receiver (ESP-NOW + FastLED)
 

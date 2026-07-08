@@ -2,11 +2,11 @@
 
 LVGL touchscreen UI for the **ESP32-8048S043** (4.3" 800×480 RGB, ESP32-S3).
 
-| Variant | Touch | PlatformIO env |
-|---------|-------|----------------|
-| **8048S043C** | GT911 capacitive (I2C) | `esp32-8048S043C` ← default |
-| 8048S043R | XPT2046 resistive (SPI) | `esp32-8048S043R` |
-| 8048S043N | No touch | `esp32-8048S043N` |
+## Arduino IDE (recommended)
+
+Open **`../UI_8048S043_ESPNOW/`** — see its [README](../UI_8048S043_ESPNOW/README.md) for full setup.
+
+## PlatformIO
 
 ## Hardware
 
