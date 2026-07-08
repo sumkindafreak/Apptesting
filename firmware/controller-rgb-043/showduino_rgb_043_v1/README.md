@@ -92,4 +92,4 @@ Replace `build_opt.h` with the contents of `build_opt_R.h` (or rename files), th
 
 ## PlatformIO alternative
 
-See `../UI_RGB_8048_ESPNOW/` for the PlatformIO version of the same firmware.
+See `../../controller-rgb-050/platformio/` for PlatformIO builds (4.3" and 5" envs).
