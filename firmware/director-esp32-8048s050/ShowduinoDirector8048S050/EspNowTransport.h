@@ -4,15 +4,10 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_now.h>
-#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
 #include <esp_wifi_types.h>
-#endif
 #include "BoardConfig.h"
 
-// =========================================================
-// Showduino ESP-NOW transport
-// Portable Director S3 -> P4 board built-in ESP32-C6 wireless bridge
-// =========================================================
+// ESP32 Arduino core 3.x send callback uses wifi_tx_info_t (not const uint8_t*).
 
 struct ShowduinoEspNowPacket {
   uint32_t magic;
@@ -103,13 +98,8 @@ private:
     SHOWDUINO_P4_C6_MAC_5
   };
 
-#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
   static void onSentStatic(const wifi_tx_info_t *info, esp_now_send_status_t status) {
     (void)info;
-#else
-  static void onSentStatic(const uint8_t *macAddr, esp_now_send_status_t status) {
-    (void)macAddr;
-#endif
     Serial.print("ESP-NOW: send status = ");
     Serial.println(status == ESP_NOW_SEND_SUCCESS ? "delivered" : "failed");
   }
