@@ -8,6 +8,7 @@ Showduino firmware organized by role and hardware.
 |----------|------|------|-----|
 | **ESP32-2432S028R** (2.8" CYD) | UI director → Mega serial | `controller-cyd/showduino_cyd_director_v1/` | Arduino |
 | **ESP32-8048S043** (4.3" RGB) | LVGL UI → SUE ESP-NOW | `controller-rgb-043/showduino_rgb_043_v1/` | Arduino |
+| **ESP32-8048S050** (5" RGB director OS) | LVGL UI → P4/C6 ESP-NOW | `director-esp32-8048s050/ShowduinoDirector8048S050/` | Arduino |
 | **ESP32-8048S050** (5" 800×400 RGB) | LVGL UI → SUE ESP-NOW | `controller-rgb-050/showduino_rgb_director_v1/` | Arduino |
 | **ESP32-8048S050** (5" RGB) | LVGL UI → SUE ESP-NOW | `controller-rgb-050/platformio/` | PlatformIO |
 | **ESP32-S3** (SUE Brain) | LED / ESP-NOW executor | `brain-sue/SUE_ESPNOW_FASTLED_SINGLEPIXEL/` | Arduino |
