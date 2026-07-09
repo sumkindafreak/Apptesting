@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes" />
+  <title>System - Showduino Studio</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .info-item {
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .info-item .label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+
+    .info-item .value {
+      font-size: 1rem;
+      font-family: monospace;
+    }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .setting-row:last-child {
+      border-bottom: none;
+    }
+
+    input[type="text"], select {
+      padding: 0.5rem 0.75rem;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      min-width: 180px;
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <h1>System</h1>
+    <a href="index.html" class="back-link">← Main Menu</a>
+  </header>
+
+  <main class="page-content">
+    <div class="card">
+      <h2>Device Status</h2>
+      <div class="info-grid" id="deviceGrid">
+        <div class="info-item"><div class="label">Connection</div><div class="value" id="valConnection">—</div></div>
+        <div class="info-item"><div class="label">IP Address</div><div class="value" id="valIp">—</div></div>
+        <div class="info-item"><div class="label">Wi-Fi Mode</div><div class="value" id="valWifi">—</div></div>
+        <div class="info-item"><div class="label">RTC</div><div class="value" id="valRtc">—</div></div>
+        <div class="info-item"><div class="label">SD Card</div><div class="value" id="valSd">—</div></div>
+        <div class="info-item"><div class="label">Audio</div><div class="value" id="valAudio">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Display</h2>
+      <div class="setting-row">
+        <span>Screen Brightness</span>
+        <div class="slider-row" style="flex:1;margin:0;">
+          <input type="range" id="brightness" min="10" max="100" value="80" />
+          <span class="value" id="brightnessVal">80%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Wi-Fi</h2>
+      <div class="setting-row">
+        <span>Network Name (SSID)</span>
+        <input type="text" id="wifiSsid" placeholder="Showduino-AP" />
+      </div>
+      <div class="setting-row">
+        <span>Password</span>
+        <input type="text" id="wifiPass" placeholder="••••••••" />
+      </div>
+      <div class="setting-row">
+        <span>Mode</span>
+        <select id="wifiMode">
+          <option value="ap">Access Point</option>
+          <option value="sta">Station (Client)</option>
+        </select>
+      </div>
+      <div style="margin-top:1rem;">
+        <button class="btn" id="btnSaveWifi">Save Wi-Fi Settings</button>
+      </div>
+      <p id="wifiMsg" style="margin-top:0.75rem;color:var(--text-secondary);font-size:0.85rem;"></p>
+    </div>
+
+    <div class="card">
+      <h2>About</h2>
+      <div class="info-grid">
+        <div class="info-item"><div class="label">UI Version</div><div class="value">Showduino Studio Web 1.0</div></div>
+        <div class="info-item"><div class="label">Architecture</div><div class="value">UI Desk → Brain (SUE)</div></div>
+        <div class="info-item"><div class="label">Comms</div><div class="value">JSON / Wi-Fi</div></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const brightness = document.getElementById('brightness');
+    const brightnessVal = document.getElementById('brightnessVal');
+
+    brightness.addEventListener('input', () => {
+      brightnessVal.textContent = brightness.value + '%';
+      document.documentElement.style.filter = `brightness(${0.4 + brightness.value / 100 * 0.6})`;
+      localStorage.setItem('showduino_brightness', brightness.value);
+    });
+
+    const savedBri = localStorage.getItem('showduino_brightness');
+    if (savedBri) {
+      brightness.value = savedBri;
+      brightnessVal.textContent = savedBri + '%';
+      document.documentElement.style.filter = `brightness(${0.4 + savedBri / 100 * 0.6})`;
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (!res.ok) throw new Error('offline');
+        const data = await res.json();
+
+        document.getElementById('valConnection').textContent = 'Connected';
+        document.getElementById('valIp').textContent = data.ap_ip || data.sta_ip || 'Unknown';
+        document.getElementById('valWifi').textContent = (data.wifi_mode || 'ap').toUpperCase();
+        document.getElementById('valRtc').textContent = data.rtc_present ? 'Present' : 'Missing';
+        document.getElementById('valSd').textContent = data.sd_present ? 'Mounted' : 'Missing';
+        document.getElementById('valAudio').textContent = (data.audio && data.audio.present) ? 'Ready' : 'Missing';
+
+        if (data.wifi_mode) {
+          document.getElementById('wifiMode').value = data.wifi_mode;
+        }
+      } catch (err) {
+        document.getElementById('valConnection').textContent = 'Disconnected';
+        document.getElementById('valIp').textContent = '—';
+        document.getElementById('valWifi').textContent = '—';
+        document.getElementById('valRtc').textContent = '—';
+        document.getElementById('valSd').textContent = '—';
+        document.getElementById('valAudio').textContent = '—';
+      }
+    }
+
+    document.getElementById('btnSaveWifi').addEventListener('click', async () => {
+      const msg = document.getElementById('wifiMsg');
+      const payload = {
+        cmd: 'wifi_config',
+        ssid: document.getElementById('wifiSsid').value,
+        password: document.getElementById('wifiPass').value,
+        mode: document.getElementById('wifiMode').value
+      };
+
+      try {
+        const res = await fetch('/api/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('failed');
+        msg.textContent = 'Wi-Fi settings sent to SUE. Device may reboot.';
+        msg.style.color = 'var(--success)';
+      } catch (err) {
+        msg.textContent = 'SUE offline — settings saved locally only.';
+        msg.style.color = 'var(--warning)';
+        localStorage.setItem('showduino_wifi', JSON.stringify(payload));
+      }
+    });
+
+    const savedWifi = localStorage.getItem('showduino_wifi');
+    if (savedWifi) {
+      try {
+        const w = JSON.parse(savedWifi);
+        if (w.ssid) document.getElementById('wifiSsid').value = w.ssid;
+        if (w.mode) document.getElementById('wifiMode').value = w.mode;
+      } catch (e) {}
+    }
+
+    refreshStatus();
+    setInterval(refreshStatus, 3000);
+  </script>
+</body>
+</html>
